@@ -4,20 +4,6 @@
     from Kaken_Cleaner_fast import KakenToTable
     KakenToTable("KAKEN_2000_2005.xml").to_jsonlines("output.jsonl")
 
-保存先 save_path は必須の引数とする（v0.1.0 までは省略すると修論の
-config.py の DATA を参照していた）。
-
-分野の段（細目・分科・部）について:
-    この変換器は field_list・saimoku_list に、XML にある niiCode と path を
-    そのまま（nii は先頭の0を除いた文字列にそろえて）残し、「分科」「部」
-    などの段の名前は付けない。段の数と意味は分類表の版（年度）によって
-    異なり、2段（例 工学79 › 航空宇宙工学3044）の課題も、3段（工学79 ›
-    総合工学414 › 航空宇宙工学415）の課題もある。path の何番目を分科と
-    みなすかを変換の段階で決めると、版の違いを取り違えたまま固定してしまう。
-    そのため段の判定は分析の側で、nii をキーに分類表（細目表）と結合して
-    行う。saimoku_list の parent_nii は path 上の一つ上の要素であり、
-    分科とは限らない。
-
 辞書参照の削減、共通処理の集約で効率化する。
 日付は created_date / start_date / end_date のすべてを 'YYYY-MM-DD' に揃え、
 年だけの値を補った行、作成日で代用した行は is_date_comp = 1 とする。
@@ -32,6 +18,21 @@ XML の辞書化には従来と同じ xmltodict を使い、属性・空要素�
 分野名 field と対応する field_nii に加え、field_list に全階層・全分類表を残す。
 saimoku_list は細目表の sequence ごとの最深要素であり、分科の判定は行わない。
 Kaken_Cleaner.py 自体には依存しない。
+
+保存先 save_path は必須の引数とする（v0.1.0 までは省略すると修論の
+config.py の DATA を参照していた）。
+
+分野の段（細目・分科・部）について:
+    field_list・saimoku_list には XML の niiCode と path を（nii は先頭の0を
+    除いた文字列にそろえて）残し、分科・部などの段の名前は、ここでは付けない。
+    parent_nii・ancestor_niis を、修正済みの分類表（Layer1 の fields_snapshot）
+    に nii で結合して決める。KAKEN の path は分類表 XML と同じ誤り（例：nii 3044
+    の段数、看護学の親）を含むため、path の位置から段を決めると誤りをそのまま
+    持ち込む。saimoku_list の parent_nii は path 上の一つ上の要素であり、
+    分科とは限らない。
+    従来の field（最後の field 要素の名前）は互換のため残す。細目を2つ持つ
+    課題では第2の細目、ほかの表があればその名前になる点に注意する。
+    （この段落は「Kaken_Cleaner_fast (2).py」(2026-11-18) の説明から移した）
 """
 
 import csv
