@@ -318,16 +318,6 @@ class KakenToTable:
                 if missing:
                     foreign_colab = 1
 
-                # 英語側だけの研究者は sequence 番号の順に足す（v0.1.0 までは set の
-                # 走査順で、実行ごとに並びが変わりえた）。追加前のインデックスを
-                # 使う挙動は維持する。
-                for sequence in sorted(missing, key=_sequence_key):
-                    member = en_members[en_indices[sequence]]
-                    if sequence == "1":
-                        ja_members.insert(0, member)
-                    else:
-                        ja_members.append(member)
-
                 for sequence in ja_sequences & en_sequences:
                     member = ja_members[ja_indices[sequence]]
                     # 英語がリストの場合は、空値でもキーがあれば補完しない。
@@ -345,6 +335,17 @@ class KakenToTable:
                             name = ""
                         member["personalName"] = {"fullName": name}
                         foreign_colab = 1
+
+                # 英語側だけの研究者は、名前を補った後に sequence 番号の順で足す。
+                # v0.1.0 までは先に足していたため、先頭に足すと ja_indices がずれ、
+                # 別の研究者に名前を補うことがあった。また set の走査順で足していた
+                # ため、実行ごとに並びが変わりえた。
+                for sequence in sorted(missing, key=_sequence_key):
+                    member = en_members[en_indices[sequence]]
+                    if sequence == "1":
+                        ja_members.insert(0, member)
+                    else:
+                        ja_members.append(member)
 
         is_list = not isinstance(ja_members, dict)
         team, erad, institution, department, job_title, name = self.repmenber_info2(

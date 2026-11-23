@@ -201,5 +201,24 @@ class MemberOrderTests(unittest.TestCase):
             self.assertEqual(results, {("代表", "en2", "en3", "en4", "en5", "en10", "en12")})
 
 
+class NameFillTests(unittest.TestCase):
+    """英語側の sequence 1 を先頭に足しても、名前は同じ sequence の人に補う。"""
+
+    def test_name_goes_to_same_sequence(self):
+        xml = ('<grantAward awardNumber="1"><urlList><url>u</url></urlList>'
+               '<summary xml:lang="ja"><title>t</title>'
+               '<member sequence="2"><institution>A</institution></member>'
+               '<member sequence="3"><institution>B</institution></member></summary>'
+               '<summary xml:lang="en">'
+               '<member sequence="1"><personalName><fullName>EN1</fullName></personalName></member>'
+               '<member sequence="3"><personalName><fullName>EN3</fullName></personalName></member>'
+               '</summary></grantAward>')
+        row = KakenToTable().kaken_to_table(xmltodict.parse(xml)["grantAward"])
+        self.assertEqual([(m["institution"], m["fullName"]) for m in row["all_members"]],
+                         [(None, "EN1"), ("A", None), ("B", "EN3")])
+        self.assertEqual(row["fullName"], "EN1")
+        self.assertEqual(row["foreign_colab"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
