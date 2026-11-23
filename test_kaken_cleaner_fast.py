@@ -253,5 +253,37 @@ class MissingMemberTests(unittest.TestCase):
         self.assertEqual((row["team"], row["fullName"]), (0, "EN1"))
 
 
+class TeamTests(unittest.TestCase):
+    """team は all_members の人数（英語側にだけいる研究者も含む）で決める。"""
+
+    @staticmethod
+    def row(ja, en):
+        xml = ('<grantAward awardNumber="1"><urlList><url>u</url></urlList>'
+               f'<summary xml:lang="ja"><title>t</title>{ja}</summary>'
+               f'<summary xml:lang="en">{en}</summary></grantAward>')
+        return KakenToTable().kaken_to_table(xmltodict.parse(xml)["grantAward"])
+
+    @staticmethod
+    def m(seq, name):
+        return (f'<member sequence="{seq}"><personalName><fullName>{name}</fullName>'
+                '</personalName></member>')
+
+    def test_team(self):
+        m = self.m
+        cases = (
+            (m(1, "甲"), "", 0),                                   # 1人
+            (m(1, "甲") + m(2, "乙"), "", 1),                      # 日本語側に2人
+            (m(1, "甲"), m(1, "A") + m(2, "B"), 1),                # 英語側にだけ2人目
+            (m(1, "甲") + m(2, "乙"), m(1, "A") + m(2, "B"), 1),  # 日英とも2人
+            (m(1, "甲"), m(1, "A"), 0),                            # 日英とも同じ1人
+            (m(1, "甲"), m(1, "A") + m(1, "A2"), 0),               # 英語側の sequence が重複（v0.2.0 までは1）
+        )
+        for ja, en, expected in cases:
+            with self.subTest(ja=ja, en=en):
+                row = self.row(ja, en)
+                self.assertEqual(row["team"], expected)
+                self.assertEqual(row["team"], int(len(row["all_members"]) > 1))
+
+
 if __name__ == "__main__":
     unittest.main()

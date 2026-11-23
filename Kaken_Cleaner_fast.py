@@ -357,10 +357,10 @@ class KakenToTable:
             ja_members, lst=is_list
         )
         members = ja_members if is_list else [ja_members]
-        if not summaries[0].get("member"):
-            # 英語側だけから研究者を得た場合、team は人数で決める
-            # （従来の team は日本語側の member が複数かどうか）。
-            team = int(len(members) > 1)
+        # team は all_members の人数が2人以上なら1（v0.3.0 から明示）。v0.2.0 までは
+        # 英語側を補った後の member がリストかどうかで決めており、ほぼ同じ結果だが、
+        # 日本語側1人・英語側の sequence が重複する場合などに1人でも1になっていた。
+        team = int(len(members) > 1)
         return (
             team,
             foreign_colab,
