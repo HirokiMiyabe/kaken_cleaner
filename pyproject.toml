@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# 仮置き: パッケージ名・対応する Python の版・ライセンスは未決（README 参照）。
+name = "kaken-cleaner"
+version = "0.2.0.dev0"
+description = "KAKEN の XML 書き出しを、1行=1課題の JSON Lines に変換する"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "lxml",
+    "pandas",
+    "tqdm",
+    "xmltodict",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools]
+# 修論の側の `from Kaken_Cleaner_fast import KakenToTable` をそのまま使えるよう、
+# モジュール名は変えない。
+py-modules = ["Kaken_Cleaner_fast"]

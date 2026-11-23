@@ -1,10 +1,22 @@
 """KAKEN XML を一件ずつ、辞書・JSON Lines に変換する。
 
 使い方:
-    from config import DATA
     from Kaken_Cleaner_fast import KakenToTable
-    source = DATA / "kaken_raw" / "KAKEN_2000_2005.xml"
-    KakenToTable(source).to_jsonlines(DATA / "kaken_refined" / "output.jsonl")
+    KakenToTable("KAKEN_2000_2005.xml").to_jsonlines("output.jsonl")
+
+保存先 save_path は必須の引数とする（v0.1.0 までは省略すると修論の
+config.py の DATA を参照していた）。
+
+分野の段（細目・分科・部）について:
+    この変換器は field_list・saimoku_list に、XML にある niiCode と path を
+    そのまま（nii は先頭の0を除いた文字列にそろえて）残し、「分科」「部」
+    などの段の名前は付けない。段の数と意味は分類表の版（年度）によって
+    異なり、2段（例 工学79 › 航空宇宙工学3044）の課題も、3段（工学79 ›
+    総合工学414 › 航空宇宙工学415）の課題もある。path の何番目を分科と
+    みなすかを変換の段階で決めると、版の違いを取り違えたまま固定してしまう。
+    そのため段の判定は分析の側で、nii をキーに分類表（細目表）と結合して
+    行う。saimoku_list の parent_nii は path 上の一つ上の要素であり、
+    分科とは限らない。
 
 辞書参照の削減、共通処理の集約で効率化する。
 日付は created_date / start_date / end_date のすべてを 'YYYY-MM-DD' に揃え、
@@ -88,11 +100,25 @@ def _sequence_key(value):
     return (0, int(value)) if str(value).isdigit() else (1, str(value))
 
 
+def _as_element(item):
+    """xmltodict の要素を辞書にそろえる。
+
+    属性のない要素（<field>名前</field>）は文字列、空の要素は None になる。
+    その場合も課題の変換を失敗させず、文字列は {"#text": 文字列} として扱う。
+    属性のある要素（辞書）はそのまま返すので、従来の値は変わらない。
+    """
+    if isinstance(item, dict):
+        return item
+    if item is None:
+        return {}
+    return {"#text": item}
+
+
 def _field_codes(summary):
     """全分野と細目系列を取り出す。path の親は点検用で、分科とは限らない。"""
     fields = []
     groups = {}
-    for item in _xml_items(summary.get("field")):
+    for item in map(_as_element, _xml_items(summary.get("field"))):
         nii = _norm_nii(item.get("@niiCode"))
         path = item.get("@path")
         chain = _path_niis(path)
@@ -501,7 +527,8 @@ class KakenToTable:
         field_codes = _field_codes(summary)
         field = summary.get("field")
         if field:
-            field = field[-1]["#text"] if isinstance(field, list) else field.get("#text")
+            last = field[-1] if isinstance(field, list) else field
+            field = _as_element(last).get("#text")
         else:
             field = None
 
@@ -596,10 +623,10 @@ class KakenToTable:
         result.update(field_codes)
         return result
 
-    def to_jsonlines(self, save_path=None, save=True, error_path=None):
+    def to_jsonlines(self, save_path, save=True, error_path=None):
         """一件ずつ変換・保存し、変換できないレコードは表示して継続する。
 
-        保存先の省略時は config.py の DATA / kaken_refined / output.jsonl を使う。
+        save_path は必須。保存先のフォルダは作らないので、先に用意する。
         失敗は errors/<出力ファイル名>.errors.tsv に記録する。
         error_path で保存先を変更できる。データと別フォルダに置くことで、
         JSONL を列挙する既存ノートブックにエラーログを混入させない。
@@ -611,13 +638,7 @@ class KakenToTable:
         変換成功レコードだけをリストで返す。全件を返す仕様には変えない。
         """
         if save_path is None:
-            import sys
-            local_root = Path(__file__).resolve().parents[2]
-            if str(local_root) not in sys.path:
-                sys.path.insert(0, str(local_root))
-            from config import DATA
-            save_path = DATA / "kaken_refined" / "output.jsonl"
-            save_path.parent.mkdir(parents=True, exist_ok=True)
+            raise TypeError("save_path is required (the config.py default was removed)")
         encode = json.JSONEncoder(ensure_ascii=False).encode
         parse = xmltodict.parse
         convert = self.kaken_to_table

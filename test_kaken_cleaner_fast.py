@@ -111,5 +111,63 @@ class FieldCodesTests(unittest.TestCase):
             self.assertEqual(result["saimoku_nii_all"], ["3044"])
 
 
+def grant(fields, number="17K18091"):
+    return (f'<grantAward awardNumber="{number}">'
+            '<urlList><url>https://example.test/</url></urlList>'
+            '<summary xml:lang="ja"><title>研究</title>' + fields
+            + '<member sequence="1" role="principal_investigator">'
+            '<personalName><fullName>研究者</fullName></personalName></member>'
+            '<overallAwardAmount><directCost>1000</directCost></overallAwardAmount>'
+            '</summary><summary xml:lang="en"><title>Research</title></summary>'
+            '</grantAward>')
+
+
+def convert(xml):
+    with tempfile.TemporaryDirectory() as directory:
+        source = Path(directory) / "input.xml"
+        output = Path(directory) / "output.jsonl"
+        source.write_text(f"<grantAwards>{xml}</grantAwards>", encoding="utf-8")
+        cleaner = KakenToTable(source)
+        cleaner.to_jsonlines(output)
+        rows = [json.loads(line) for line in
+                output.read_text(encoding="utf-8").splitlines()]
+        return cleaner, rows
+
+
+class PlainFieldTests(unittest.TestCase):
+    """属性のない分野の要素でも、課題を出力から落とさない。"""
+
+    def test_single_plain_field(self):
+        cleaner, rows = convert(grant("<field>航空宇宙工学</field>"))
+        self.assertEqual((cleaner.seen, cleaner.written, cleaner.failed), (1, 1, 0))
+        row = rows[0]
+        self.assertEqual(row["field"], "航空宇宙工学")
+        self.assertIsNone(row["field_nii"])
+        self.assertEqual(row["field_list"][0]["name"], "航空宇宙工学")
+        self.assertEqual(row["n_saimoku"], 0)
+        self.assertEqual(row["directCost"], 1000)
+
+    def test_plain_field_mixed_with_attributed_fields(self):
+        cleaner, rows = convert(
+            grant(field("79", "000079") + "<field>名前だけ</field>"
+                  + field("3044", "000079003044"))
+            + grant("<field>最後が名前だけ</field><field/>", "63850161"))
+        self.assertEqual((cleaner.written, cleaner.failed), (2, 0))
+        self.assertEqual(rows[0]["field"], "分野3044")
+        self.assertEqual(rows[0]["field_nii"], "3044")
+        self.assertEqual(len(rows[0]["field_list"]), 3)
+        self.assertEqual(rows[0]["saimoku_nii_all"], ["3044"])
+        self.assertIsNone(rows[1]["field"])
+        self.assertEqual(rows[1]["field_list"][0]["name"], "最後が名前だけ")
+
+
+class SavePathTests(unittest.TestCase):
+    def test_save_path_is_required(self):
+        with self.assertRaises(TypeError):
+            KakenToTable("input.xml").to_jsonlines()
+        with self.assertRaises(TypeError):
+            KakenToTable("input.xml").to_jsonlines(None)
+
+
 if __name__ == "__main__":
     unittest.main()
