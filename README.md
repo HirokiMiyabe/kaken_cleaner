@@ -67,6 +67,10 @@ python tools/compare_versions.py v0.1.0:Kaken_Cleaner_fast.py Kaken_Cleaner_fast
 python tools/compare_versions.py v0.1.0:Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --xml 手元のKAKEN_a.xml.gz 手元のKAKEN_b.xml.gz
 ```
 
+## 動作を確かめる範囲
+
+GitHub Actions（`.github/workflows/tests.yml`）で、Python 3.10〜3.13 と xmltodict 0.13.0・1.0.4 のすべての組み合わせについて、試験と v0.1.0 との比較を回します。xmltodict の版を変えても同じ XML から同じ出力になるかも確かめます。通った範囲を `pyproject.toml` の下限にします。
+
 ## まだ決めていないこと
 
 - パッケージ名（`pyproject.toml` では仮に `kaken-cleaner`。import 名は修論との互換のため `Kaken_Cleaner_fast` のまま）
