@@ -8,6 +8,8 @@
 後者は git show で取り出す（リポジトリのフォルダで実行する）。
 --synthetic N は乱数（seed 0）で合成した N 課題の XML を使う。KAKEN の実データは
 リポジトリに入れないので、実データでの確認は --xml で手元のファイルを指定する。
+--unordered all_members を付けると、その列は並び順を問わずに比べる（0.2.0 で
+all_members の英語側の研究者を sequence 番号の順に固定したため、v0.1.0 とは順だけが違いうる）。
 出力は一時フォルダに書いて消す。旧版の列が新版にすべてあり、値が一致すれば mismatched cells: 0 と表示する。
 """
 import argparse, gzip, importlib.util, json, random, subprocess, tempfile
@@ -82,7 +84,14 @@ def _rows(path):
             yield json.loads(line)
 
 
-def compare(old, new, src, workdir):
+def _same(a, b, unordered):
+    if unordered and isinstance(a, list) and isinstance(b, list):
+        key = lambda x: json.dumps(x, ensure_ascii=False, sort_keys=True)
+        return sorted(a, key=key) == sorted(b, key=key)
+    return a == b
+
+
+def compare(old, new, src, workdir, unordered=()):
     counts = {}
     for label, mod in (("old", old), ("new", new)):
         out = Path(workdir) / f"{label}.jsonl"
@@ -105,7 +114,7 @@ def compare(old, new, src, workdir):
             continue
         compared += 1
         for col, value in a.items():
-            if b.get(col, object()) != value:
+            if col not in b or not _same(value, b[col], col in unordered):
                 mism[col] = mism.get(col, 0) + 1
     only_new += sum(1 for _ in new_rows)
     print(f"compared rows={compared}; rows only in old: {only_old}; rows only in new: {only_new}")
@@ -118,6 +127,8 @@ def main():
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--xml", nargs="+", help=".xml または .xml.gz。複数指定できる")
     g.add_argument("--synthetic", type=int)
+    ap.add_argument("--unordered", nargs="*", default=[],
+                    help="中身だけを比べ、並び順は問わない列（例 all_members）")
     args = ap.parse_args()
     old, new = load("old_cleaner", args.old), load("new_cleaner", args.new)
     with tempfile.TemporaryDirectory() as d:
@@ -125,11 +136,11 @@ def main():
             src = Path(d) / "in.xml"
             src.write_text("<grantAwards>" + "".join(grant(i) for i in range(args.synthetic))
                            + "</grantAwards>", encoding="utf-8")
-            compare(old, new, src, d)
+            compare(old, new, src, d, set(args.unordered))
         else:
             for src in args.xml:
                 print(f"== {src}")
-                compare(old, new, src, d)
+                compare(old, new, src, d, set(args.unordered))
 
 if __name__ == "__main__":
     main()

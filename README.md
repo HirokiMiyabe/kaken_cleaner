@@ -38,6 +38,7 @@ with gzip.open("KAKEN_2000_2005.xml.gz", "rb") as source:
 ## 出力の列
 
 - **既存の列（v0.1.0 の列）の名前と値は変えません。** 修論などの分析がこれに依存しているためです。列を足すときは既存の列のあとに足し、ここに書きます。
+- `all_members` のうち、英語の summary にだけいる研究者は sequence 番号の順に足します。v0.1.0 までは実行ごとに順が変わりえました（中身は同じ）。v0.1.0 と比べるときは `--unordered all_members` を付けます。
 - 分野の列（`field_nii`、`field_list`、`saimoku_list`、`saimoku_nii`、`saimoku_nii_all`、`n_saimoku`、`multi_saimoku`、`shumoku_nii`、`shumoku_path`、`review_section_list`、`summary_lang`）は、既存の列のあとにあります。nii は先頭の0を除いた文字列です（数字でない値はそのまま）。
 - 段の名前（細目・分科・部）は付けません。段の判定は、nii をキーに分類表と結合して分析の側で行います。理由は `Kaken_Cleaner_fast.py` の冒頭の説明にあります。
 
@@ -46,7 +47,7 @@ with gzip.open("KAKEN_2000_2005.xml.gz", "rb") as source:
 | 版 | 中身 |
 |---|---|
 | v0.1.0 | 修論の版を改修したもの（nii の列つき）。試験6件 |
-| 0.2.0.dev0（作業中） | 分野の要素が属性のない文字列でも課題を落とさない。保存先の既定値（修論の `config.py` への依存）を外す。`pip install -e` で入る形にする |
+| 0.2.0.dev0（作業中） | `all_members` の並び順を固定する。分野の要素が属性のない文字列でも課題を落とさない。保存先の既定値（修論の `config.py` への依存）を外す。`pip install -e` で入る形にする |
 
 ## フォルダ
 
@@ -63,8 +64,8 @@ python -m pytest
 版を変えたときは、前の版と既存の列が一致することを確かめます。
 
 ```powershell
-python tools/compare_versions.py v0.1.0:Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --synthetic 5000
-python tools/compare_versions.py v0.1.0:Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --xml 手元のKAKEN_a.xml.gz 手元のKAKEN_b.xml.gz
+python tools/compare_versions.py v0.1.0:Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --unordered all_members --synthetic 5000
+python tools/compare_versions.py v0.1.0:Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --unordered all_members --xml 手元のKAKEN_a.xml.gz 手元のKAKEN_b.xml.gz
 ```
 
 ## 動作を確かめる範囲

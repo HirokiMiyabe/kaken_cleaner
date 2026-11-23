@@ -318,8 +318,10 @@ class KakenToTable:
                 if missing:
                     foreign_colab = 1
 
-                # set の走査順と、追加前のインデックスを使う挙動を維持する。
-                for sequence in missing:
+                # 英語側だけの研究者は sequence 番号の順に足す（v0.1.0 までは set の
+                # 走査順で、実行ごとに並びが変わりえた）。追加前のインデックスを
+                # 使う挙動は維持する。
+                for sequence in sorted(missing, key=_sequence_key):
                     member = en_members[en_indices[sequence]]
                     if sequence == "1":
                         ja_members.insert(0, member)

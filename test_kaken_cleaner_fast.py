@@ -169,5 +169,37 @@ class SavePathTests(unittest.TestCase):
             KakenToTable("input.xml").to_jsonlines(None)
 
 
+class MemberOrderTests(unittest.TestCase):
+    """英語の summary にだけいる研究者を、実行ごとに変わらない順で足す。"""
+
+    XML = ('<grantAwards><grantAward awardNumber="1">'
+           '<urlList><url>u</url></urlList><summary xml:lang="ja"><title>t</title>'
+           '<member sequence="1"><personalName><fullName>代表</fullName></personalName></member>'
+           '</summary><summary xml:lang="en">'
+           + "".join(f'<member sequence="{n}"><personalName><fullName>en{n}</fullName>'
+                     '</personalName></member>' for n in (1, 12, 3, 10, 2, 5, 4))
+           + '</summary></grantAward></grantAwards>')
+
+    def test_sequence_order_regardless_of_hash_seed(self):
+        import os, subprocess, sys
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "input.xml"
+            source.write_text(self.XML, encoding="utf-8")
+            results = set()
+            for seed in ("0", "1", "2", "3", "4"):
+                output = Path(directory) / f"out_{seed}.jsonl"
+                subprocess.run(
+                    [sys.executable, "-c",
+                     "import sys; from Kaken_Cleaner_fast import KakenToTable; "
+                     "KakenToTable(sys.argv[1]).to_jsonlines(sys.argv[2])",
+                     str(source), str(output)],
+                    check=True, capture_output=True,
+                    cwd=Path(__file__).resolve().parent,
+                    env={**os.environ, "PYTHONHASHSEED": seed})
+                row = json.loads(output.read_text(encoding="utf-8"))
+                results.add(tuple(m["fullName"] for m in row["all_members"]))
+            self.assertEqual(results, {("代表", "en2", "en3", "en4", "en5", "en10", "en12")})
+
+
 if __name__ == "__main__":
     unittest.main()
