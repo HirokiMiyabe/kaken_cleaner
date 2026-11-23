@@ -1,18 +1,24 @@
 """2つの版の Kaken_Cleaner_fast.py を同じ XML にかけ、旧版の全列が新版で一致するか確かめる。
 
 使い方:
-    git show v0.1.0:Kaken_Cleaner_fast.py --output=old_Kaken_Cleaner_fast.py
-    python tools/compare_versions.py old_Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --synthetic 5000
-    python tools/compare_versions.py old_Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --xml KAKEN_a.xml.gz KAKEN_b.xml.gz
+    python tools/compare_versions.py v0.1.0:Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --synthetic 5000
+    python tools/compare_versions.py v0.1.0:Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --xml KAKEN_a.xml.gz KAKEN_b.xml.gz
 
+版は、ファイルの場所か「Git の版:ファイル名」（例 v0.1.0:Kaken_Cleaner_fast.py）で指定する。
+後者は git show で取り出す（リポジトリのフォルダで実行する）。
 --synthetic N は乱数（seed 0）で合成した N 課題の XML を使う。KAKEN の実データは
 リポジトリに入れないので、実データでの確認は --xml で手元のファイルを指定する。
 出力は一時フォルダに書いて消す。旧版の列が新版にすべてあり、値が一致すれば mismatched cells: 0 と表示する。
 """
-import argparse, gzip, importlib.util, json, random, tempfile
+import argparse, gzip, importlib.util, json, random, subprocess, tempfile
 from pathlib import Path
 
 def load(name, path):
+    if not Path(path).exists() and ":" in path:
+        code = subprocess.run(["git", "show", path], capture_output=True, check=True).stdout
+        tmp = Path(tempfile.mkdtemp()) / f"{name}.py"
+        tmp.write_bytes(code)
+        path = tmp
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod); return mod
 
