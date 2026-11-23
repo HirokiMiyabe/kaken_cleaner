@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 # 仮置き: パッケージ名・ライセンスは未決（README 参照）。
 # requires-python は CI（3.10〜3.13）で試験が通った範囲。
 name = "kaken-cleaner"
-version = "0.2.0.dev0"
+version = "0.2.0"
 description = "KAKEN の XML 書き出しを、1行=1課題の JSON Lines に変換する"
 readme = "README.md"
 requires-python = ">=3.10"
