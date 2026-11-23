@@ -220,5 +220,38 @@ class NameFillTests(unittest.TestCase):
         self.assertEqual(row["foreign_colab"], 1)
 
 
+class MissingMemberTests(unittest.TestCase):
+    """日本語の summary に member が無い課題も出力から落とさない。"""
+
+    @staticmethod
+    def xml(en=""):
+        return ('<grantAward awardNumber="23520587"><urlList><url>u</url></urlList>'
+                '<summary xml:lang="ja"><title>t</title></summary>'
+                f'<summary xml:lang="en">{en}</summary></grantAward>')
+
+    def test_no_members_anywhere(self):
+        cleaner, rows = convert(self.xml())
+        self.assertEqual((cleaner.written, cleaner.failed), (1, 0))
+        row = rows[0]
+        self.assertEqual(row["all_members"], [])
+        self.assertEqual(row["n_members_in_xml"], 0)
+        self.assertIsNone(row["team"])
+        self.assertIsNone(row["fullName"])
+        self.assertEqual(row["foreign_colab"], 0)
+        self.assertEqual(row["base_institution"], [None])
+
+    def test_members_only_in_english(self):
+        row = KakenToTable().kaken_to_table(xmltodict.parse(self.xml(
+            '<member sequence="2"><personalName><fullName>EN2</fullName></personalName></member>'
+            '<member sequence="1"><personalName><fullName>EN1</fullName></personalName>'
+            '<institution>X</institution></member>'))["grantAward"])
+        self.assertEqual([m["fullName"] for m in row["all_members"]], ["EN1", "EN2"])
+        self.assertEqual((row["team"], row["fullName"], row["foreign_colab"]), (1, "EN1", 1))
+        row = KakenToTable().kaken_to_table(xmltodict.parse(self.xml(
+            '<member sequence="1"><personalName><fullName>EN1</fullName></personalName>'
+            '</member>'))["grantAward"])
+        self.assertEqual((row["team"], row["fullName"]), (0, "EN1"))
+
+
 if __name__ == "__main__":
     unittest.main()
