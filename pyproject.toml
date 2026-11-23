@@ -3,7 +3,8 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# 仮置き: パッケージ名・対応する Python の版・ライセンスは未決（README 参照）。
+# 仮置き: パッケージ名・ライセンスは未決（README 参照）。
+# requires-python は CI（3.10〜3.13）で試験が通った範囲。
 name = "kaken-cleaner"
 version = "0.2.0.dev0"
 description = "KAKEN の XML 書き出しを、1行=1課題の JSON Lines に変換する"
@@ -13,7 +14,7 @@ dependencies = [
     "lxml",
     "pandas",
     "tqdm",
-    "xmltodict",
+    "xmltodict>=0.13,<2",  # 0.13.0 と 1.0.4 で同じ出力になることを CI で確かめている
 ]
 
 [project.optional-dependencies]

@@ -74,6 +74,6 @@ GitHub Actions（`.github/workflows/tests.yml`）で、Python 3.10〜3.13 と xm
 ## まだ決めていないこと
 
 - パッケージ名（`pyproject.toml` では仮に `kaken-cleaner`。import 名は修論との互換のため `Kaken_Cleaner_fast` のまま）
-- 対応する Python の版（仮に 3.10 以上。括弧つきの `with` を使っているため）
+- 対応する Python の版（いまは 3.10 以上。CI で 3.10〜3.13 の試験が通ることを確かめた）
 - リポジトリの公開・非公開、ライセンス
 - 版の付け方
