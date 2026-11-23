@@ -24,6 +24,14 @@ cleaner.to_jsonlines("kaken_refined/KAKEN_2000_2005.jsonl")
 print(cleaner.seen, cleaner.written, cleaner.failed)
 ```
 
+- `.xml.gz` はファイル名のままでは読めません。`gzip.open` で開いて渡してください。
+
+```python
+import gzip
+with gzip.open("KAKEN_2000_2005.xml.gz", "rb") as source:
+    KakenToTable(source).to_jsonlines("kaken_refined/KAKEN_2000_2005.jsonl")
+```
+
 - 保存先 `save_path` は必須です（v0.1.0 までは省略すると修論の `config.py` の `DATA` を参照していました）。保存先のフォルダは先に作ってください。
 - 変換できなかった課題は `<保存先のフォルダ>/errors/<ファイル名>.errors.tsv` に記録し、処理を続けます。`error_path` で置き場所を変えられます。
 
@@ -40,6 +48,10 @@ print(cleaner.seen, cleaner.written, cleaner.failed)
 | v0.1.0 | 修論の版を改修したもの（nii の列つき）。試験6件 |
 | 0.2.0.dev0（作業中） | 分野の要素が属性のない文字列でも課題を落とさない。保存先の既定値（修論の `config.py` への依存）を外す。`pip install -e` で入る形にする |
 
+## フォルダ
+
+- `reference/`：参考として残すだけのファイル（別実装の (2) など）。import も試験もしない
+
 ## 試験
 
 ```powershell
@@ -53,7 +65,7 @@ python -m pytest
 ```powershell
 git show v0.1.0:Kaken_Cleaner_fast.py > old_Kaken_Cleaner_fast.py
 python tools/compare_versions.py old_Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --synthetic 5000
-python tools/compare_versions.py old_Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --xml 手元のKAKEN.xml
+python tools/compare_versions.py old_Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --xml 手元のKAKEN_a.xml.gz 手元のKAKEN_b.xml.gz
 ```
 
 ## まだ決めていないこと

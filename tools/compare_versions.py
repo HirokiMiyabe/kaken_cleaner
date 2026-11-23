@@ -3,13 +3,13 @@
 使い方:
     git show v0.1.0:Kaken_Cleaner_fast.py > old_Kaken_Cleaner_fast.py
     python tools/compare_versions.py old_Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --synthetic 5000
-    python tools/compare_versions.py old_Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --xml KAKEN_xxx.xml
+    python tools/compare_versions.py old_Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --xml KAKEN_a.xml.gz KAKEN_b.xml.gz
 
 --synthetic N は乱数（seed 0）で合成した N 課題の XML を使う。KAKEN の実データは
 リポジトリに入れないので、実データでの確認は --xml で手元のファイルを指定する。
-旧版の列が新版にすべてあり、値が一致すれば mismatched cells: 0 と表示する。
+出力は一時フォルダに書いて消す。旧版の列が新版にすべてあり、値が一致すれば mismatched cells: 0 と表示する。
 """
-import argparse, importlib.util, json, random, tempfile
+import argparse, gzip, importlib.util, json, random, tempfile
 from pathlib import Path
 
 def load(name, path):
@@ -64,39 +64,66 @@ def grant(i):
             f'<summary xml:lang="en"><title>T{i}</title>{en}</summary>{prods}{reps}</grantAward>')
 
 
+def _open_source(path):
+    """.gz は展開しながら読む（KakenToTable はファイル名の .gz を展開しないため）。"""
+    path = Path(path)
+    return gzip.open(path, "rb") if path.suffix == ".gz" else open(path, "rb")
+
+
+def _rows(path):
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            yield json.loads(line)
+
+
+def compare(old, new, src, workdir):
+    counts = {}
+    for label, mod in (("old", old), ("new", new)):
+        out = Path(workdir) / f"{label}.jsonl"
+        with _open_source(src) as source:
+            c = mod.KakenToTable(source)
+            c.to_jsonlines(out, error_path=Path(workdir) / f"{label}.errors.tsv")
+        counts[label] = (c.written, c.failed)
+    print(f"old written={counts['old'][0]} failed={counts['old'][1]}; "
+          f"new written={counts['new'][0]} failed={counts['new'][1]}")
+    # 出力は XML の順。新版は旧版が落とした課題を含みうるので、新版を進めながら合わせる。
+    mism, only_new, only_old, compared = {}, 0, 0, 0
+    new_rows = _rows(Path(workdir) / "new.jsonl")
+    for a in _rows(Path(workdir) / "old.jsonl"):
+        for b in new_rows:
+            if b["awardNumber"] == a["awardNumber"]:
+                break
+            only_new += 1
+        else:
+            only_old += 1
+            continue
+        compared += 1
+        for col, value in a.items():
+            if b.get(col, object()) != value:
+                mism[col] = mism.get(col, 0) + 1
+    only_new += sum(1 for _ in new_rows)
+    print(f"compared rows={compared}; rows only in old: {only_old}; rows only in new: {only_new}")
+    print(f"mismatched cells: {sum(mism.values())} {mism if mism else ''}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("old"); ap.add_argument("new")
     g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--xml"); g.add_argument("--synthetic", type=int)
+    g.add_argument("--xml", nargs="+", help=".xml または .xml.gz。複数指定できる")
+    g.add_argument("--synthetic", type=int)
     args = ap.parse_args()
     old, new = load("old_cleaner", args.old), load("new_cleaner", args.new)
     with tempfile.TemporaryDirectory() as d:
-        if args.xml:
-            src = Path(args.xml)
-        else:
+        if args.synthetic:
             src = Path(d) / "in.xml"
             src.write_text("<grantAwards>" + "".join(grant(i) for i in range(args.synthetic))
                            + "</grantAwards>", encoding="utf-8")
-        outs = {}
-        for label, mod in (("old", old), ("new", new)):
-            out = Path(d) / f"{label}.jsonl"
-            c = mod.KakenToTable(src)
-            c.to_jsonlines(out, error_path=Path(d) / f"{label}.errors.tsv")
-            rows = {}
-            for line in out.read_text(encoding="utf-8").splitlines():
-                row = json.loads(line); rows[row["awardNumber"]] = row
-            outs[label] = (rows, c.failed)
-    (o, of), (n, nf) = outs["old"], outs["new"]
-    print(f"old rows={len(o)} failed={of}; new rows={len(n)} failed={nf}")
-    only_old = set(o) - set(n)
-    mism = {}
-    for key in set(o) & set(n):
-        for col, value in o[key].items():
-            if n[key].get(col, object()) != value:
-                mism[col] = mism.get(col, 0) + 1
-    print(f"rows only in old: {len(only_old)}; rows only in new: {len(set(n) - set(o))}")
-    print(f"mismatched cells: {sum(mism.values())} {mism if mism else ''}")
+            compare(old, new, src, d)
+        else:
+            for src in args.xml:
+                print(f"== {src}")
+                compare(old, new, src, d)
 
 if __name__ == "__main__":
     main()
