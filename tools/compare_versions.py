@@ -1,7 +1,7 @@
 """2つの版の Kaken_Cleaner_fast.py を同じ XML にかけ、旧版の全列が新版で一致するか確かめる。
 
 使い方:
-    git show v0.1.0:Kaken_Cleaner_fast.py > old_Kaken_Cleaner_fast.py
+    git show v0.1.0:Kaken_Cleaner_fast.py --output=old_Kaken_Cleaner_fast.py
     python tools/compare_versions.py old_Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --synthetic 5000
     python tools/compare_versions.py old_Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --xml KAKEN_a.xml.gz KAKEN_b.xml.gz
 

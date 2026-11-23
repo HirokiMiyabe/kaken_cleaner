@@ -63,7 +63,7 @@ python -m pytest
 版を変えたときは、前の版と既存の列が一致することを確かめます。
 
 ```powershell
-git show v0.1.0:Kaken_Cleaner_fast.py > old_Kaken_Cleaner_fast.py
+git show v0.1.0:Kaken_Cleaner_fast.py --output=old_Kaken_Cleaner_fast.py
 python tools/compare_versions.py old_Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --synthetic 5000
 python tools/compare_versions.py old_Kaken_Cleaner_fast.py Kaken_Cleaner_fast.py --xml 手元のKAKEN_a.xml.gz 手元のKAKEN_b.xml.gz
 ```
