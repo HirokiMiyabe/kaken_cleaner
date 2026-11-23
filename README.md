@@ -53,6 +53,10 @@ with gzip.open("KAKEN_2000_2005.xml.gz", "rb") as source:
 
 - `reference/`：参考として残すだけのファイル（別実装の (2) など）。import も試験もしない
 
+## 列の定義の変更
+
+- `team`（v0.3.0.dev0 から）：`all_members` の人数が2人以上なら1、1人なら0、研究者がいなければ None。v0.2.0 までは英語側を補った後の研究者がリストかどうかで決めていたため、英語側の sequence が重複する課題などで、1人でも1になっていた
+
 ## 試験
 
 ```powershell
