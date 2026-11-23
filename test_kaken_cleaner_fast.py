@@ -111,5 +111,147 @@ class FieldCodesTests(unittest.TestCase):
             self.assertEqual(result["saimoku_nii_all"], ["3044"])
 
 
+def grant(fields, number="17K18091"):
+    return (f'<grantAward awardNumber="{number}">'
+            '<urlList><url>https://example.test/</url></urlList>'
+            '<summary xml:lang="ja"><title>研究</title>' + fields
+            + '<member sequence="1" role="principal_investigator">'
+            '<personalName><fullName>研究者</fullName></personalName></member>'
+            '<overallAwardAmount><directCost>1000</directCost></overallAwardAmount>'
+            '</summary><summary xml:lang="en"><title>Research</title></summary>'
+            '</grantAward>')
+
+
+def convert(xml):
+    with tempfile.TemporaryDirectory() as directory:
+        source = Path(directory) / "input.xml"
+        output = Path(directory) / "output.jsonl"
+        source.write_text(f"<grantAwards>{xml}</grantAwards>", encoding="utf-8")
+        cleaner = KakenToTable(source)
+        cleaner.to_jsonlines(output)
+        rows = [json.loads(line) for line in
+                output.read_text(encoding="utf-8").splitlines()]
+        return cleaner, rows
+
+
+class PlainFieldTests(unittest.TestCase):
+    """属性のない分野の要素でも、課題を出力から落とさない。"""
+
+    def test_single_plain_field(self):
+        cleaner, rows = convert(grant("<field>航空宇宙工学</field>"))
+        self.assertEqual((cleaner.seen, cleaner.written, cleaner.failed), (1, 1, 0))
+        row = rows[0]
+        self.assertEqual(row["field"], "航空宇宙工学")
+        self.assertIsNone(row["field_nii"])
+        self.assertEqual(row["field_list"][0]["name"], "航空宇宙工学")
+        self.assertEqual(row["n_saimoku"], 0)
+        self.assertEqual(row["directCost"], 1000)
+
+    def test_plain_field_mixed_with_attributed_fields(self):
+        cleaner, rows = convert(
+            grant(field("79", "000079") + "<field>名前だけ</field>"
+                  + field("3044", "000079003044"))
+            + grant("<field>最後が名前だけ</field><field/>", "63850161"))
+        self.assertEqual((cleaner.written, cleaner.failed), (2, 0))
+        self.assertEqual(rows[0]["field"], "分野3044")
+        self.assertEqual(rows[0]["field_nii"], "3044")
+        self.assertEqual(len(rows[0]["field_list"]), 3)
+        self.assertEqual(rows[0]["saimoku_nii_all"], ["3044"])
+        self.assertIsNone(rows[1]["field"])
+        self.assertEqual(rows[1]["field_list"][0]["name"], "最後が名前だけ")
+
+
+class SavePathTests(unittest.TestCase):
+    def test_save_path_is_required(self):
+        with self.assertRaises(TypeError):
+            KakenToTable("input.xml").to_jsonlines()
+        with self.assertRaises(TypeError):
+            KakenToTable("input.xml").to_jsonlines(None)
+
+
+class MemberOrderTests(unittest.TestCase):
+    """英語の summary にだけいる研究者を、実行ごとに変わらない順で足す。"""
+
+    XML = ('<grantAwards><grantAward awardNumber="1">'
+           '<urlList><url>u</url></urlList><summary xml:lang="ja"><title>t</title>'
+           '<member sequence="1"><personalName><fullName>代表</fullName></personalName></member>'
+           '</summary><summary xml:lang="en">'
+           + "".join(f'<member sequence="{n}"><personalName><fullName>en{n}</fullName>'
+                     '</personalName></member>' for n in (1, 12, 3, 10, 2, 5, 4))
+           + '</summary></grantAward></grantAwards>')
+
+    def test_sequence_order_regardless_of_hash_seed(self):
+        import os, subprocess, sys
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "input.xml"
+            source.write_text(self.XML, encoding="utf-8")
+            results = set()
+            for seed in ("0", "1", "2", "3", "4"):
+                output = Path(directory) / f"out_{seed}.jsonl"
+                subprocess.run(
+                    [sys.executable, "-c",
+                     "import sys; from Kaken_Cleaner_fast import KakenToTable; "
+                     "KakenToTable(sys.argv[1]).to_jsonlines(sys.argv[2])",
+                     str(source), str(output)],
+                    check=True, capture_output=True,
+                    cwd=Path(__file__).resolve().parent,
+                    env={**os.environ, "PYTHONHASHSEED": seed})
+                row = json.loads(output.read_text(encoding="utf-8"))
+                results.add(tuple(m["fullName"] for m in row["all_members"]))
+            self.assertEqual(results, {("代表", "en2", "en3", "en4", "en5", "en10", "en12")})
+
+
+class NameFillTests(unittest.TestCase):
+    """英語側の sequence 1 を先頭に足しても、名前は同じ sequence の人に補う。"""
+
+    def test_name_goes_to_same_sequence(self):
+        xml = ('<grantAward awardNumber="1"><urlList><url>u</url></urlList>'
+               '<summary xml:lang="ja"><title>t</title>'
+               '<member sequence="2"><institution>A</institution></member>'
+               '<member sequence="3"><institution>B</institution></member></summary>'
+               '<summary xml:lang="en">'
+               '<member sequence="1"><personalName><fullName>EN1</fullName></personalName></member>'
+               '<member sequence="3"><personalName><fullName>EN3</fullName></personalName></member>'
+               '</summary></grantAward>')
+        row = KakenToTable().kaken_to_table(xmltodict.parse(xml)["grantAward"])
+        self.assertEqual([(m["institution"], m["fullName"]) for m in row["all_members"]],
+                         [(None, "EN1"), ("A", None), ("B", "EN3")])
+        self.assertEqual(row["fullName"], "EN1")
+        self.assertEqual(row["foreign_colab"], 1)
+
+
+class MissingMemberTests(unittest.TestCase):
+    """日本語の summary に member が無い課題も出力から落とさない。"""
+
+    @staticmethod
+    def xml(en=""):
+        return ('<grantAward awardNumber="23520587"><urlList><url>u</url></urlList>'
+                '<summary xml:lang="ja"><title>t</title></summary>'
+                f'<summary xml:lang="en">{en}</summary></grantAward>')
+
+    def test_no_members_anywhere(self):
+        cleaner, rows = convert(self.xml())
+        self.assertEqual((cleaner.written, cleaner.failed), (1, 0))
+        row = rows[0]
+        self.assertEqual(row["all_members"], [])
+        self.assertEqual(row["n_members_in_xml"], 0)
+        self.assertIsNone(row["team"])
+        self.assertIsNone(row["fullName"])
+        self.assertEqual(row["foreign_colab"], 0)
+        self.assertEqual(row["base_institution"], [None])
+
+    def test_members_only_in_english(self):
+        row = KakenToTable().kaken_to_table(xmltodict.parse(self.xml(
+            '<member sequence="2"><personalName><fullName>EN2</fullName></personalName></member>'
+            '<member sequence="1"><personalName><fullName>EN1</fullName></personalName>'
+            '<institution>X</institution></member>'))["grantAward"])
+        self.assertEqual([m["fullName"] for m in row["all_members"]], ["EN1", "EN2"])
+        self.assertEqual((row["team"], row["fullName"], row["foreign_colab"]), (1, "EN1", 1))
+        row = KakenToTable().kaken_to_table(xmltodict.parse(self.xml(
+            '<member sequence="1"><personalName><fullName>EN1</fullName></personalName>'
+            '</member>'))["grantAward"])
+        self.assertEqual((row["team"], row["fullName"]), (0, "EN1"))
+
+
 if __name__ == "__main__":
     unittest.main()

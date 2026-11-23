@@ -1,10 +1,8 @@
 """KAKEN XML を一件ずつ、辞書・JSON Lines に変換する。
 
 使い方:
-    from config import DATA
     from Kaken_Cleaner_fast import KakenToTable
-    source = DATA / "kaken_raw" / "KAKEN_2000_2005.xml"
-    KakenToTable(source).to_jsonlines(DATA / "kaken_refined" / "output.jsonl")
+    KakenToTable("KAKEN_2000_2005.xml").to_jsonlines("output.jsonl")
 
 辞書参照の削減、共通処理の集約で効率化する。
 日付は created_date / start_date / end_date のすべてを 'YYYY-MM-DD' に揃え、
@@ -20,6 +18,21 @@ XML の辞書化には従来と同じ xmltodict を使い、属性・空要素�
 分野名 field と対応する field_nii に加え、field_list に全階層・全分類表を残す。
 saimoku_list は細目表の sequence ごとの最深要素であり、分科の判定は行わない。
 Kaken_Cleaner.py 自体には依存しない。
+
+保存先 save_path は必須の引数とする（v0.1.0 までは省略すると修論の
+config.py の DATA を参照していた）。
+
+分野の段（細目・分科・部）について:
+    field_list・saimoku_list には XML の niiCode と path を（nii は先頭の0を
+    除いた文字列にそろえて）残し、分科・部などの段の名前は、ここでは付けない。
+    parent_nii・ancestor_niis を、修正済みの分類表（Layer1 の fields_snapshot）
+    に nii で結合して決める。KAKEN の path は分類表 XML と同じ誤り（例：nii 3044
+    の段数、看護学の親）を含むため、path の位置から段を決めると誤りをそのまま
+    持ち込む。saimoku_list の parent_nii は path 上の一つ上の要素であり、
+    分科とは限らない。
+    従来の field（最後の field 要素の名前）は互換のため残す。細目を2つ持つ
+    課題では第2の細目、ほかの表があればその名前になる点に注意する。
+    （この段落は「Kaken_Cleaner_fast (2).py」(2026-11-18) の説明から移した）
 """
 
 import csv
@@ -88,11 +101,25 @@ def _sequence_key(value):
     return (0, int(value)) if str(value).isdigit() else (1, str(value))
 
 
+def _as_element(item):
+    """xmltodict の要素を辞書にそろえる。
+
+    属性のない要素（<field>名前</field>）は文字列、空の要素は None になる。
+    その場合も課題の変換を失敗させず、文字列は {"#text": 文字列} として扱う。
+    属性のある要素（辞書）はそのまま返すので、従来の値は変わらない。
+    """
+    if isinstance(item, dict):
+        return item
+    if item is None:
+        return {}
+    return {"#text": item}
+
+
 def _field_codes(summary):
     """全分野と細目系列を取り出す。path の親は点検用で、分科とは限らない。"""
     fields = []
     groups = {}
-    for item in _xml_items(summary.get("field")):
+    for item in map(_as_element, _xml_items(summary.get("field"))):
         nii = _norm_nii(item.get("@niiCode"))
         path = item.get("@path")
         chain = _path_niis(path)
@@ -246,7 +273,10 @@ class KakenToTable:
     def reseacher_info(self, kaken_dict):
         """日英の研究者情報を、従来と同じ条件・順序で補完する。"""
         summaries = kaken_dict["summary"]
-        ja_members = summaries[0]["member"]
+        # 日本語の summary に member が無い課題も落とさない（v0.1.0 では
+        # KeyError で出力から落ちていた。例 23520587）。英語側に研究者がいれば
+        # 従来の補完と同じ規則で足し、いなければ研究者の列を None にする。
+        ja_members = summaries[0].get("member") or []
         en_members = summaries[1].get("member")
         foreign_colab = 0
 
@@ -291,14 +321,6 @@ class KakenToTable:
                 if missing:
                     foreign_colab = 1
 
-                # set の走査順と、追加前のインデックスを使う挙動を維持する。
-                for sequence in missing:
-                    member = en_members[en_indices[sequence]]
-                    if sequence == "1":
-                        ja_members.insert(0, member)
-                    else:
-                        ja_members.append(member)
-
                 for sequence in ja_sequences & en_sequences:
                     member = ja_members[ja_indices[sequence]]
                     # 英語がリストの場合は、空値でもキーがあれば補完しない。
@@ -317,11 +339,28 @@ class KakenToTable:
                         member["personalName"] = {"fullName": name}
                         foreign_colab = 1
 
+                # 英語側だけの研究者は、名前を補った後に sequence 番号の順で足す。
+                # v0.1.0 までは先に足していたため、先頭に足すと ja_indices がずれ、
+                # 別の研究者に名前を補うことがあった。また set の走査順で足していた
+                # ため、実行ごとに並びが変わりえた。
+                for sequence in sorted(missing, key=_sequence_key):
+                    member = en_members[en_indices[sequence]]
+                    if sequence == "1":
+                        ja_members.insert(0, member)
+                    else:
+                        ja_members.append(member)
+
         is_list = not isinstance(ja_members, dict)
+        if not ja_members:  # 日英どちらにも研究者がいない
+            return (None, foreign_colab, None, None, None, None, None, [])
         team, erad, institution, department, job_title, name = self.repmenber_info2(
             ja_members, lst=is_list
         )
         members = ja_members if is_list else [ja_members]
+        if not summaries[0].get("member"):
+            # 英語側だけから研究者を得た場合、team は人数で決める
+            # （従来の team は日本語側の member が複数かどうか）。
+            team = int(len(members) > 1)
         return (
             team,
             foreign_colab,
@@ -501,7 +540,8 @@ class KakenToTable:
         field_codes = _field_codes(summary)
         field = summary.get("field")
         if field:
-            field = field[-1]["#text"] if isinstance(field, list) else field.get("#text")
+            last = field[-1] if isinstance(field, list) else field
+            field = _as_element(last).get("#text")
         else:
             field = None
 
@@ -523,7 +563,7 @@ class KakenToTable:
             else:
                 base_institution = [institutions.get("#text")]
         else:
-            members = summary["member"]
+            members = summary.get("member") or {}
             representative = members[0] if isinstance(members, list) else members
             base_institution = [representative.get("institution")]
 
@@ -596,10 +636,10 @@ class KakenToTable:
         result.update(field_codes)
         return result
 
-    def to_jsonlines(self, save_path=None, save=True, error_path=None):
+    def to_jsonlines(self, save_path, save=True, error_path=None):
         """一件ずつ変換・保存し、変換できないレコードは表示して継続する。
 
-        保存先の省略時は config.py の DATA / kaken_refined / output.jsonl を使う。
+        save_path は必須。保存先のフォルダは作らないので、先に用意する。
         失敗は errors/<出力ファイル名>.errors.tsv に記録する。
         error_path で保存先を変更できる。データと別フォルダに置くことで、
         JSONL を列挙する既存ノートブックにエラーログを混入させない。
@@ -611,13 +651,7 @@ class KakenToTable:
         変換成功レコードだけをリストで返す。全件を返す仕様には変えない。
         """
         if save_path is None:
-            import sys
-            local_root = Path(__file__).resolve().parents[2]
-            if str(local_root) not in sys.path:
-                sys.path.insert(0, str(local_root))
-            from config import DATA
-            save_path = DATA / "kaken_refined" / "output.jsonl"
-            save_path.parent.mkdir(parents=True, exist_ok=True)
+            raise TypeError("save_path is required (the config.py default was removed)")
         encode = json.JSONEncoder(ensure_ascii=False).encode
         parse = xmltodict.parse
         convert = self.kaken_to_table
