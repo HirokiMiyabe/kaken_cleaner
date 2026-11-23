@@ -36,6 +36,11 @@ jobs:
   xmltodict-output:
     # xmltodict の版を変えても、同じ XML から同じ出力になるかを確かめる
     runs-on: ubuntu-latest
+    env:
+      # v0.1.0 から、英語の summary にだけいる研究者を all_members に足す順が
+      # set の走査順（文字列のハッシュ）で決まり、実行ごとに変わりうる。
+      # ここでは xmltodict の版の影響だけを見るため、ハッシュの種を固定する。
+      PYTHONHASHSEED: "0"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
