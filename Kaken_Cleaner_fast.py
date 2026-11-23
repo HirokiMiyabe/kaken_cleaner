@@ -273,7 +273,10 @@ class KakenToTable:
     def reseacher_info(self, kaken_dict):
         """日英の研究者情報を、従来と同じ条件・順序で補完する。"""
         summaries = kaken_dict["summary"]
-        ja_members = summaries[0]["member"]
+        # 日本語の summary に member が無い課題も落とさない（v0.1.0 では
+        # KeyError で出力から落ちていた。例 23520587）。英語側に研究者がいれば
+        # 従来の補完と同じ規則で足し、いなければ研究者の列を None にする。
+        ja_members = summaries[0].get("member") or []
         en_members = summaries[1].get("member")
         foreign_colab = 0
 
@@ -348,10 +351,16 @@ class KakenToTable:
                         ja_members.append(member)
 
         is_list = not isinstance(ja_members, dict)
+        if not ja_members:  # 日英どちらにも研究者がいない
+            return (None, foreign_colab, None, None, None, None, None, [])
         team, erad, institution, department, job_title, name = self.repmenber_info2(
             ja_members, lst=is_list
         )
         members = ja_members if is_list else [ja_members]
+        if not summaries[0].get("member"):
+            # 英語側だけから研究者を得た場合、team は人数で決める
+            # （従来の team は日本語側の member が複数かどうか）。
+            team = int(len(members) > 1)
         return (
             team,
             foreign_colab,
@@ -554,7 +563,7 @@ class KakenToTable:
             else:
                 base_institution = [institutions.get("#text")]
         else:
-            members = summary["member"]
+            members = summary.get("member") or {}
             representative = members[0] if isinstance(members, list) else members
             base_institution = [representative.get("institution")]
 
